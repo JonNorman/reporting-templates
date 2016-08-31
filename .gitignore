@@ -1,2 +1,4 @@
 ~*
 *.xlsx
+*.pyc
+.DS_Store
