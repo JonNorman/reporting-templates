@@ -1,60 +1,73 @@
-#coding: utf-8
 from __future__ import unicode_literals
-import xlutils
-
+from collections import defaultdict
+from common import *
+import itertools
 import logging
 import openpyxl
 import re
 
+def first_non_blank_cell_above(cell):
+    for row in range(cell.row):
+        cell = cell.offset(row = -1)
+        if cell.value is None:
+            return cell.offset(row = 1)
+
 def find_cells_with_regex(worksheet, pattern):
     return [ cell for cell in worksheet.get_cell_collection() if pattern.match(str(cell.value)) ]
 
-def find_tags(worksheet):
-    return { str(cell.value): cell for cell in find_cells_with_regex(worksheet, re.compile('^<(\w+)>$')) }
+def get_tags(worksheet, expected_tags, unique):
+    all_tags = find_cells_with_regex(worksheet, re.compile('^<(\w+)>$'))
+    filtered_tags = [ tag for tag in all_tags if tag.value in expected_tags ]
 
-def add_row_to_cell(worksheet, cell):
-    return worksheet.cell(row = cell.row + 1, column = cell.col_idx)
+    # if tags only occur once, return tag: cell
+    if unique:
+        tags =  { str(cell.value): cell for cell in filtered_tags }
+    # otherwise return tag: list[cell]
+    else:
+        tags = defaultdict(list)
+        for tag in filtered_tags:
+            tags[str(tag.value)].append(tag)
 
-def write_row_between_tags(worksheet, start_tag, end_tag, values):
+    missing_tags = [ tag for tag in expected_tags if tag not in tags ]
 
-    tag_range_size = end_tag.col_idx - start_tag.col_idx + 1
-    if tag_range_size != len(values):
+    if missing_tags:
+        logging.error('Missing expected tags in the template file.')
+        logging.error('Expected: "{}"'.format(', '.join(expected_tags)))
+        logging.error('Actual: "{}"'.format(', '.join(tags)))
+        logging.error('Missing: "{}"'.format(', '.join(missing_tags)))
+        return None
+    else:
+        return tags
+
+def distance(start_cell, end_cell):
+    return (end_cell.row - start_cell.row + 1, end_cell.col_idx - start_cell.col_idx + 1)
+
+def get_cell_range(first_cell, last_cell):
+    rows_diff, cols_diff = distance(first_cell, last_cell)
+    return [ first_cell.offset(row = row, column = col) for row, col in itertools.product(rows_diff, cols_diff)]
+
+def write_row_between_tags(start_tag, end_tag, values = None):
+
+    _, width = distance(start_tag, end_tag)
+
+    # verify that we have the same number of cells as values to write (if provided)
+    if values and width != len(values):
         logging.warning('Start and end tags ("{}", "{}") do not outline the same sized range as the values provided: "{}".'.format(
             start_tag.coordinate,
             end_tag.coordinate,
             values
         ))
         return (start_tag, end_tag)
-    else:
-        logging.debug('Writing values "{}" between start and end tags provided, "{}" and "{}"...'.format(
-            values,
-            start_tag.coordinate,
-            end_tag.coordinate
+    elif values:
+        logging.debug('{:>2} {}'.format(
+            start_tag.row,
+            printable(values)
         ))
+    else:
+        values = [None] * distance(start_tag, end_tag)[1]
 
-        cols_with_values = zip(range(start_tag.col_idx, end_tag.col_idx + 1), values)
+    # create a range of offsets to write across the row
+    for offset, value in zip(range(width), values):
+        start_tag.offset(column = offset).value = value
 
-        for col_idx, value in cols_with_values:
-            worksheet.cell(row = start_tag.row, column = col_idx).value = value
-
-        return (add_row_to_cell(worksheet, start_tag), add_row_to_cell(worksheet, end_tag))
-
-def write_blank_row_between_tags(worksheet, start_tag, end_tag):
-    logging.debug('Writing blank values between start and end tags provided, "{}" and "{}"...'.format(
-        start_tag.coordinate,
-        end_tag.coordinate
-    ))
-
-    for col_idx in range(start_tag.col_idx, end_tag.col_idx + 1):
-        worksheet.cell(row = start_tag.row, column = col_idx).value = ''
-
-    return (add_row_to_cell(worksheet, start_tag), add_row_to_cell(worksheet, end_tag))
-
-def write_total_row_between_tags(worksheet, start_tag, end_tag, values):
-        logging.debug('Writing total row on line "{}"'.format(end_tag.row))
-
-        cols_with_values = zip(range(end_tag.col_idx, end_tag.col_idx - len(values), -1), values[::-1])
-        for col_idx, value in cols_with_values:
-            worksheet.cell(row = end_tag.row, column = col_idx).value = value
-
-        return (add_row_to_cell(worksheet, start_tag), add_row_to_cell(worksheet, end_tag))
+    return (start_tag.offset(row = 1), end_tag.offset(row = 1))

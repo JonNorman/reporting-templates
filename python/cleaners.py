@@ -1,4 +1,3 @@
-#coding: utf-8
 from __future__ import unicode_literals
 import logging
 import numpy as np
@@ -40,9 +39,13 @@ def drop_row_with_value_in_column(df, column_name, value, exact_match):
 
     return keep_rows
 
-def drop_column(df, column_name):
-    logging.debug('Removing "{0}" column.'.format(column_name))
-    return df.drop(column_name, 1)
+def drop_columns_not_required(df, required_columns):
+
+    actual_columns = list(df.columns.values)
+    ignored_columns = [ column for column in actual_columns if column not in required_columns ]
+
+    logging.debug('Removing columns: "{0}" column.'.format(', '.join(ignored_columns)))
+    return reduce(lambda df, column: df.drop(column, 1), ignored_columns, df)
 
 def replace_goal_quantity_with_nan(df, column_name, threshold):
 
