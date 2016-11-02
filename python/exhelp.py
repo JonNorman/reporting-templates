@@ -15,9 +15,9 @@ def first_non_blank_cell_above(cell):
 def find_cells_with_regex(worksheet, pattern):
     return [ cell for cell in worksheet.get_cell_collection() if pattern.match(str(cell.value)) ]
 
-def get_tags(worksheet, expected_tags, unique):
+def get_tags(worksheet, expected_tags = None, unique = True):
     all_tags = find_cells_with_regex(worksheet, re.compile('^<(\w+)>$'))
-    filtered_tags = [ tag for tag in all_tags if tag.value in expected_tags ]
+    filtered_tags = [ tag for tag in all_tags if not expected_tags or tag.value in expected_tags ]
 
     # if tags only occur once, return tag: cell
     if unique:
@@ -28,7 +28,7 @@ def get_tags(worksheet, expected_tags, unique):
         for tag in filtered_tags:
             tags[str(tag.value)].append(tag)
 
-    missing_tags = [ tag for tag in expected_tags if tag not in tags ]
+    missing_tags = None if not expected_tags else [ tag for tag in expected_tags if tag not in tags ]
 
     if missing_tags:
         logging.error('Missing expected tags in the template file.')
@@ -41,10 +41,6 @@ def get_tags(worksheet, expected_tags, unique):
 
 def distance(start_cell, end_cell):
     return (end_cell.row - start_cell.row + 1, end_cell.col_idx - start_cell.col_idx + 1)
-
-def get_cell_range(first_cell, last_cell):
-    rows_diff, cols_diff = distance(first_cell, last_cell)
-    return [ first_cell.offset(row = row, column = col) for row, col in itertools.product(rows_diff, cols_diff)]
 
 def write_row_between_tags(start_tag, end_tag, values = None):
 

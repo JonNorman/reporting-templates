@@ -3,8 +3,10 @@ from exhelp import *
 from validators import *
 
 from copy import copy
-from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.drawing.image import Image
 from openpyxl.styles import Font
+from openpyxl.styles.borders import Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 from functools import partial
 import logging
@@ -161,7 +163,7 @@ def write_data(df, workbook, output_path):
 
     return (tags['<data_start>'], end_tag)
 
-def apply_styling(workbook, data_start, data_end):
+def apply_styling(workbook, data_start, data_end, image_path):
 
     worksheet = workbook._sheets[0]
     length, width = distance(data_start, data_end)
@@ -180,18 +182,26 @@ def apply_styling(workbook, data_start, data_end):
             cell.number_format = copy(template.number_format)
 
     # embolden all of the tags
-    for tag in find_cells_with_regex(worksheet, re.compile('^<\w+>$')):
-        tag.font = Font(name=tag.font.name,
-                        size=tag.font.size,
-                        bold=True,
-                        italic=tag.font.italic,
-                        vertAlign=tag.font.vertAlign,
-                        underline=tag.font.underline,
-                        strike=tag.font.strike,
-                        color=tag.font.color)
+    for tag_name, tags in get_tags(worksheet, unique = False).iteritems():
+        for tag in tags:
+            tag.font = Font(name=tag.font.name, size=tag.font.size, bold=True,
+                            italic=tag.font.italic, vertAlign=tag.font.vertAlign,
+                            underline=tag.font.underline, strike=tag.font.strike,
+                            color=tag.font.color)
 
-    # add the picture
+    # add the picture and limit the size
+    tags = get_tags(worksheet, unique = True)
+    img = Image(image_path, coordinates = ((0,0), (1,1)), size = (80, 80))
+    worksheet.add_image(img, tags['<icon>'].coordinate)
+
     # border around data tags
+    thin_border = thin_border = Border(left=Side(style='thin'),
+                     right=Side(style='thin'),
+                     top=Side(style='thin'),
+                     bottom=Side(style='thin'))
+    for row in worksheet.iter_rows('{}:{}'.format(data_start.coordinate, data_end.coordinate)):
+        cell.border = thin_border
+
 
     return (data_start, data_end)
 
@@ -312,7 +322,7 @@ def main():
         if workbook:
             start_data, end_data = write_data(df, workbook, output_path)
             all([
-                apply_styling(workbook, start_data, end_data),
+                apply_styling(workbook, start_data, end_data, 'icon.png'),
                 replace_tags(workbook, start_data, end_data),
                 workbook.save(output_path)]
                 )
