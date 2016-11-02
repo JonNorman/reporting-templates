@@ -18,7 +18,7 @@ import shutil
 import sys
 import xlrd
 
-logging.basicConfig(level = logging.DEBUG, format = '> %(message)s')
+logging.basicConfig(level = logging.INFO, format = '> %(message)s')
 
 def read_inputs(inputs_dir = 'inputs',
                 input_sheet_name = 'Report data',
@@ -156,14 +156,11 @@ def write_data(df, workbook, output_path):
     filler = [None] * (data_width - len(total_tags))
     start_tag, end_tag = write_row_between_tags(start_tag, end_tag, filler + total_tags)
 
-    # replace the order_id tag
-    order_id = re.compile('.*?(ORD-\d+)-.*').match(df['Line Item'].iloc[0]).group(1)
-    logging.info('Determined Order ID as "{}"; writing to output.'.format(order_id))
-    worksheet[tags['<order_id>'].coordinate] = order_id
-
     return (tags['<data_start>'], end_tag)
 
 def apply_styling(workbook, data_start, data_end, image_path):
+
+    logging.info('Applying styling...')
 
     worksheet = workbook._sheets[0]
     length, width = distance(data_start, data_end)
@@ -194,14 +191,31 @@ def apply_styling(workbook, data_start, data_end, image_path):
     img = Image(image_path, coordinates = ((0,0), (1,1)), size = (80, 80))
     worksheet.add_image(img, tags['<icon>'].coordinate)
 
-    # border around data tags
-    thin_border = thin_border = Border(left=Side(style='thin'),
-                     right=Side(style='thin'),
-                     top=Side(style='thin'),
-                     bottom=Side(style='thin'))
-    for row in worksheet.iter_rows('{}:{}'.format(data_start.coordinate, data_end.coordinate)):
-        cell.border = thin_border
+    # border around data
+    def get_borders(cell, top_left, bottom_right):
+        border = Side(style='medium')
+        return {
+            'left': border if cell.col_idx == top_left.col_idx else Side(None),
+            'right': border if cell.col_idx == bottom_right.col_idx else Side(None),
+            'top': border if cell.row == top_left.row else Side(None),
+            'bottom': border if cell.row == bottom_right.row else Side(None)
+        }
 
+    # merge the order_id cell down and add a border
+    order_id = tags['<order_id>']
+    bottom = worksheet.cell(row = data_end.row, column = order_id.col_idx)
+
+    merge_range = '{}:{}'.format(order_id.coordinate, bottom.coordinate)
+    worksheet.merge_cells(merge_range)
+
+    for row in worksheet['{}:{}'.format(order_id.coordinate, bottom.coordinate)]:
+        for cell in row:
+            cell.border = Border(**get_borders(cell, order_id, bottom))
+
+
+    for row in worksheet['{}:{}'.format(data_start.coordinate, data_end.coordinate)]:
+        for cell in row:
+            cell.border = Border(**get_borders(cell, data_start, data_end))
 
     return (data_start, data_end)
 
@@ -261,7 +275,7 @@ def replace_tags(workbook, data_start, data_end):
         return offer_clean_exit(output_path)
 
     # replace totals first
-    logging.debug('Writing grand total values to totals on row "{}"'.format(totals['<total_label>'].row))
+    logging.debug('Writing grand total values to totals on row {}'.format(totals['<total_label>'].row))
 
     totals['<total_label>'].value = 'TOTAL'
     sum_total_column(totals['<total_impressions>'], subtotals['<subtotal_impressions>'])
@@ -273,20 +287,30 @@ def replace_tags(workbook, data_start, data_end):
 
     # replace clickthrough subtotals first - using total tags on same row
     for clickthrough in subtotals['<subtotal_clickthrough>']:
+        logging.debug('Writing clickthrough rate subtotal formulae to {}'.format(clickthrough.coordinate))
         impressions_tag = filter(lambda total: total.row == clickthrough.row, subtotals['<subtotal_impressions>'])[0]
         clicks_tag = filter(lambda total: total.row == clickthrough.row, subtotals['<subtotal_clicks>'])[0]
         clickthrough.value = '={}/{}'.format(clicks_tag.coordinate, impressions_tag.coordinate)
 
     # now replace each of the subtotals columns
     for tag in subtotals['<subtotal_impressions>']:
+        logging.debug('Writing impressions subtotal formulae to {}'.format(tag.coordinate))
         sum_subtotal_column(tag)
 
     for tag in subtotals['<subtotal_clicks>']:
+        logging.debug('Writing clicks subtotal formulae to {}'.format(tag.coordinate))
         sum_subtotal_column(tag)
 
     # now replace the total labels
     for tag in subtotals['<subtotal_label>']:
+        logging.debug('Writing "Total" labels to {}'.format(tag.coordinate))
         tag.value = 'Total'
+
+    # now replace the order_id tag
+    order_id = re.compile('.*?(ORD-\d+)-.*').match(data_start.value).group(1)
+    logging.info('Determined Order ID as "{}"; writing to output.'.format(order_id))
+    tags = get_tags(worksheet)
+    worksheet[tags['<order_id>'].coordinate] = order_id
 
     return workbook
 
