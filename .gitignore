@@ -2,3 +2,5 @@
 *.xlsx
 *.pyc
 .DS_Store
+.vscode/
+env/
