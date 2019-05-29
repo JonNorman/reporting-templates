@@ -1,11 +1,27 @@
 from __future__ import unicode_literals
+from builtins import input
+
 import logging
+import os
+import sys
+
+############################################
+##############   Monad stuff  ##############
+############################################
+def bind(x, f):
+    if x is None:
+        return None
+    else:
+        return f(x)
+
+############################################
+############## Input & Output ##############
+############################################
 
 def printable(items, is_data_row = True):
-    return ('|' if is_data_row else '') + ', '.join([ str(c).encode('utf-8') for c in items ])
+    return ('|' if is_data_row else '') + ', '.join([ str(c) for c in items ])
 
-def log_divider(level = logging.INFO):
-    divider = '-' * 90
+def get_logger(level = logging.INFO):
     loggers = {
         logging.DEBUG: logging.debug,
         logging.INFO: logging.info,
@@ -14,10 +30,11 @@ def log_divider(level = logging.INFO):
         logging.CRITICAL: logging.critical
     }
 
-    if loggers[level]:
-        loggers[level](divider)
+    return loggers.get(level, logging.info)
 
-import sys
+def log_divider(level = logging.INFO, symbol = '-'):
+    divider = symbol * 150
+    get_logger()(divider)
 
 # taken from http://code.activestate.com/recipes/577058/
 def query_yes_no(question, default="yes"):
@@ -43,7 +60,7 @@ def query_yes_no(question, default="yes"):
 
     while True:
         sys.stdout.write(question + prompt)
-        choice = raw_input().lower()
+        choice = input().lower()
         if default is not None and choice == '':
             return valid[default]
         elif choice in valid:
@@ -51,3 +68,13 @@ def query_yes_no(question, default="yes"):
         else:
             sys.stdout.write("Please respond with 'yes' or 'no' "
                              "(or 'y' or 'n').\n")
+
+def offer_clean_exit(output_path):
+    logging.error('Skipping report creation for report "{}".'.format(output_path))
+    if query_yes_no('* Output file "{}" is being abandoned - want me to delete it?'.format(output_path)):
+        logging.info('Deleting file {}...'.format(output_path))
+        os.remove(output_path)
+    return
+
+def should_continue():
+    return query_yes_no('Happy to continue?')

@@ -3,7 +3,7 @@ import logging
 
 # there will be columns that we don't want and will drop, but ensure that
 # the columns we DO have are in the same order as in the data
-def column_names(df, required_columns):
+def validate_column_names(df, required_columns):
 
     actual_columns = list(df.columns.values)
 
@@ -15,7 +15,7 @@ def column_names(df, required_columns):
     kept =    [ column for column in actual_columns if column in required_columns ]
 
     for column in ignored:
-        logging.warn('Found column "{}" in data; this column is not required and will be ignored.'.format(column))
+        logging.debug('Ignoring column "{}".'.format(column))
 
     mismatches = [ (a, b) for a, b in zip(required_columns, kept) if a != b ]
 
